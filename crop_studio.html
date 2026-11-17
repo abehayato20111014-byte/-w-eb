@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#10131b" />
+  <title>Crop Studio - 画像トリミング</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10131b;
+      --panel: #191e29;
+      --panel-2: #202736;
+      --line: rgba(255,255,255,.09);
+      --text: #f4f6fb;
+      --muted: #9ba6b8;
+      --accent: #8b9cff;
+      --accent-2: #b4bdff;
+      --good: #75d7b0;
+      --shadow: 0 22px 60px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse at 15% 0%, rgba(93,111,201,.16), transparent 38%),
+        radial-gradient(ellipse at 100% 85%, rgba(89,146,157,.10), transparent 34%),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+    }
+    button, input, select { font: inherit; }
+    .app { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 42px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-mark {
+      width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center;
+      background: linear-gradient(145deg, #aab5ff, #6f80e9); color: #13182b;
+      box-shadow: 0 8px 24px rgba(115,132,238,.28);
+    }
+    .brand-mark svg { width: 23px; height: 23px; }
+    h1 { font-size: 19px; letter-spacing: .02em; margin: 0; font-weight: 750; }
+    .subtitle { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .local-badge { color: #a8e5cb; border: 1px solid rgba(117,215,176,.22); background: rgba(117,215,176,.07); padding: 7px 11px; border-radius: 999px; font-size: 11px; letter-spacing: .03em; white-space: nowrap; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: stretch; }
+    .preview-panel, .sidebar { background: rgba(25,30,41,.88); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+    .preview-panel { min-width: 0; padding: 20px; display: flex; flex-direction: column; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+    .panel-heading h2 { font-size: 13px; margin: 0; font-weight: 700; letter-spacing: .04em; }
+    .ratio-chip { font-size: 11px; color: var(--accent-2); background: rgba(139,156,255,.11); border: 1px solid rgba(139,156,255,.19); padding: 6px 10px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+    .stage-wrap { flex: 1; min-height: 380px; display: grid; place-items: center; padding: 15px; border-radius: 15px; background: #111620; border: 1px solid rgba(255,255,255,.055); overflow: hidden; position: relative; }
+    .stage-wrap::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .16; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 24px 24px; }
+    .canvas-frame { position: relative; width: min(100%, 980px); display: grid; place-items: center; z-index: 1; }
+    canvas { display: block; width: 100%; height: auto; border-radius: 4px; background: #202938; box-shadow: 0 14px 40px rgba(0,0,0,.36); touch-action: none; cursor: grab; }
+    canvas.dragging { cursor: grabbing; }
+    .empty-state {
+      width: min(100%, 540px); min-height: 270px; border: 1px dashed rgba(174,187,219,.35); border-radius: 16px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 28px;
+      background: rgba(255,255,255,.018); cursor: pointer; transition: .2s ease;
+    }
+    .empty-state:hover, .empty-state.over { border-color: var(--accent); background: rgba(139,156,255,.06); }
+    .upload-icon { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: rgba(139,156,255,.13); color: var(--accent-2); margin-bottom: 16px; }
+    .upload-icon svg { width: 25px; height: 25px; }
+    .empty-state strong { font-size: 15px; margin-bottom: 7px; }
+    .empty-state span { color: var(--muted); font-size: 12px; line-height: 1.8; }
+    .stage-hint { color: #8f9aab; font-size: 11px; text-align: center; margin: 13px 0 0; }
+    .bottom-info { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; color: var(--muted); font-size: 11px; }
+    .bottom-info span:last-child { font-variant-numeric: tabular-nums; }
+    .sidebar { padding: 20px; display: flex; flex-direction: column; gap: 23px; }
+    .section { display: flex; flex-direction: column; gap: 12px; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+    .section-title small { color: var(--muted); font-size: 10px; font-weight: 500; }
+    .ratio-options { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .ratio-btn {
+      border: 1px solid var(--line); background: rgba(255,255,255,.025); color: #dce2ef; border-radius: 12px;
+      padding: 12px 10px; cursor: pointer; text-align: left; transition: .18s ease;
+    }
+    .ratio-btn:hover { background: rgba(255,255,255,.055); border-color: rgba(255,255,255,.18); }
+    .ratio-btn.active { border-color: rgba(139,156,255,.75); background: rgba(139,156,255,.12); box-shadow: inset 0 0 0 1px rgba(139,156,255,.12); }
+    .ratio-visual { height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 7px; }
+    .ratio-visual i { display: block; border: 1.5px solid #aab5ff; border-radius: 3px; background: rgba(139,156,255,.09); }
+    .ratio-btn[data-ratio="16:9"] i { width: 43px; height: 24px; }
+    .ratio-btn[data-ratio="5:3"] i { width: 40px; height: 24px; }
+    .ratio-label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 650; }
+    .ratio-label em { font-style: normal; color: var(--muted); font-weight: 500; font-size: 10px; }
+    .zoom-row { display: flex; align-items: center; gap: 9px; }
+    .round-btn { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.035); color: var(--text); cursor: pointer; display: grid; place-items: center; font-size: 17px; }
+    .round-btn:hover { background: rgba(255,255,255,.09); }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .zoom-value { min-width: 45px; text-align: right; font-size: 11px; color: #d5dcf1; font-variant-numeric: tabular-nums; }
+    .zoom-labels { display: flex; justify-content: space-between; color: #7f8a9c; font-size: 10px; margin-top: -5px; }
+    .control-note { color: var(--muted); font-size: 10px; line-height: 1.65; }
+    .action-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .secondary-btn, .primary-btn { min-height: 43px; border-radius: 11px; padding: 0 13px; cursor: pointer; font-weight: 700; font-size: 12px; transition: .18s ease; }
+    .secondary-btn { border: 1px solid var(--line); background: rgba(255,255,255,.035); color: #dce2ef; }
+    .secondary-btn:hover { background: rgba(255,255,255,.08); }
+    .primary-btn { border: 0; background: linear-gradient(135deg, #aeb9ff, #8394f5); color: #151a2a; box-shadow: 0 8px 20px rgba(130,148,245,.2); }
+    .primary-btn:hover { filter: brightness(1.07); transform: translateY(-1px); }
+    .primary-btn:disabled, .secondary-btn:disabled, .round-btn:disabled { opacity: .38; cursor: not-allowed; transform: none; }
+    .file-btn { width: 100%; min-height: 41px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(139,156,255,.35); border-radius: 11px; background: rgba(139,156,255,.09); color: #dce2ff; cursor: pointer; font-size: 12px; font-weight: 700; }
+    .file-btn:hover { background: rgba(139,156,255,.16); }
+    .file-btn svg { width: 15px; height: 15px; }
+    .export-select { width: 100%; height: 39px; border-radius: 10px; padding: 0 11px; border: 1px solid var(--line); color: #e5eaf4; background: #202736; outline: none; font-size: 12px; }
+    .divider { height: 1px; background: var(--line); margin: -6px 0; }
+    .footer-note { color: #778295; font-size: 10px; line-height: 1.7; margin-top: auto; }
+    #fileInput { display: none; }
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 14px); opacity: 0; pointer-events: none; background: #263447; border: 1px solid rgba(255,255,255,.13); border-radius: 11px; padding: 11px 16px; font-size: 12px; color: #eff5ff; box-shadow: 0 12px 35px rgba(0,0,0,.3); transition: .22s ease; z-index: 20; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 900px) {
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 22px; }
+      .footer-note { grid-column: 1 / -1; }
+      .stage-wrap { min-height: 300px; }
+    }
+    @media (max-width: 600px) {
+      .app { width: min(100% - 24px, 680px); padding: 20px 0 28px; }
+      header { margin-bottom: 17px; }
+      .local-badge { display: none; }
+      .preview-panel { padding: 12px; border-radius: 16px; }
+      .stage-wrap { min-height: 230px; padding: 8px; }
+      .sidebar { padding: 15px; grid-template-columns: 1fr; }
+      .footer-note { grid-column: auto; }
+      .bottom-info { font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/><path d="M8 8h8v8H8z"/></svg>
+        </div>
+        <div>
+          <h1>Crop Studio</h1>
+          <div class="subtitle">画像を好きな構図にトリミング</div>
+        </div>
+      </div>
+      <div class="local-badge">● 画像は端末内で処理されます</div>
+    </header>
+
+    <div class="workspace">
+      <section class="preview-panel">
+        <div class="panel-heading">
+          <h2>プレビュー</h2>
+          <span class="ratio-chip" id="ratioChip">16:9</span>
+        </div>
+        <div class="stage-wrap" id="stageWrap">
+          <label class="empty-state" id="emptyState" for="fileInput">
+            <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></div>
+            <strong>画像をここにドロップ</strong>
+            <span>またはクリックして画像を選択<br>JPG・PNG・WebP に対応</span>
+          </label>
+          <div class="canvas-frame" id="canvasFrame" hidden>
+            <canvas id="cropCanvas" width="1200" height="675" aria-label="トリミング範囲のプレビュー"></canvas>
+          </div>
+        </div>
+        <p class="stage-hint" id="stageHint">画像を読み込むと、ドラッグで位置・スライダーやホイールで拡大率を調整できます。</p>
+        <div class="bottom-info">
+          <span id="imageName">画像が選択されていません</span>
+          <span id="imageDimensions">—</span>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="section">
+          <div class="section-title">アスペクト比 <small>切り抜き比率</small></div>
+          <div class="ratio-options">
+            <button class="ratio-btn active" type="button" data-ratio="16:9" aria-pressed="true">
+              <div class="ratio-visual"><i></i></div><div class="ratio-label">16:9 <em>ワイド</em></div>
+            </button>
+            <button class="ratio-btn" type="button" data-ratio="5:3" aria-pressed="false">
+              <div class="ratio-visual"><i></i></div><div class="ratio-label">5:3 <em>横長</em></div>
+            </button>
+          </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section class="section">
+          <div class="section-title">拡大・縮小 <small>ズーム調整</small></div>
+          <div class="zoom-row">
+            <button class="round-btn" id="zoomOut" type="button" aria-label="縮小" disabled>−</button>
+            <input id="zoomSlider" type="range" min="1" max="4" step="0.01" value="1" disabled aria-label="ズーム倍率" />
+            <button class="round-btn" id="zoomIn" type="button" aria-label="拡大" disabled>＋</button>
+            <span class="zoom-value" id="zoomValue">100%</span>
+          </div>
+          <div class="zoom-labels"><span>フィット</span><span>400%</span></div>
+          <div class="control-note">画像をドラッグして切り抜く位置を調整できます。マウスホイールでも拡大・縮小できます。</div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section class="section">
+          <div class="section-title">画像の読み込み</div>
+          <label class="file-btn" for="fileInput">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+            画像を選び直す
+          </label>
+          <input id="fileInput" type="file" accept="image/*" />
+          <div class="action-row">
+            <button class="secondary-btn" id="resetBtn" type="button" disabled>位置をリセット</button>
+            <button class="secondary-btn" id="clearBtn" type="button" disabled>クリア</button>
+          </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section class="section">
+          <div class="section-title">書き出し</div>
+          <select class="export-select" id="formatSelect" aria-label="保存形式">
+            <option value="image/png">PNG（高画質）</option>
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/webp">WebP</option>
+          </select>
+          <button class="primary-btn" id="exportBtn" type="button" disabled>切り抜き画像を保存　↓</button>
+          <div class="control-note" id="exportNote">元画像に近い解像度で書き出します。</div>
+        </section>
+
+        <p class="footer-note">このアプリはブラウザ内だけで動作します。画像が外部サーバーへ送信されることはありません。</p>
+      </aside>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (selector) => document.querySelector(selector);
+      const fileInput = $('#fileInput');
+      const emptyState = $('#emptyState');
+      const canvasFrame = $('#canvasFrame');
+      const canvas = $('#cropCanvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      const zoomSlider = $('#zoomSlider');
+      const zoomValue = $('#zoomValue');
+      const ratioChip = $('#ratioChip');
+      const imageName = $('#imageName');
+      const imageDimensions = $('#imageDimensions');
+      const exportBtn = $('#exportBtn');
+      const toast = $('#toast');
+
+      const ratios = {
+        '16:9': { w: 16, h: 9, canvasW: 1200, canvasH: 675 },
+        '5:3': { w: 5, h: 3, canvasW: 1100, canvasH: 660 }
+      };
+
+      let currentRatio = '16:9';
+      let image = null;
+      let imageObjectUrl = null;
+      let imageFileName = '';
+      let zoom = 1;
+      let panX = 0;
+      let panY = 0;
+      let dragging = false;
+      let pointerStart = null;
+      let toastTimer = null;
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2300);
+      }
+
+      function setEnabled(enabled) {
+        zoomSlider.disabled = !enabled;
+        $('#zoomIn').disabled = !enabled;
+        $('#zoomOut').disabled = !enabled;
+        $('#resetBtn').disabled = !enabled;
+        $('#clearBtn').disabled = !enabled;
+        exportBtn.disabled = !enabled;
+      }
+
+      function getBaseScale() {
+        const r = ratios[currentRatio];
+        return Math.max(r.canvasW / image.naturalWidth, r.canvasH / image.naturalHeight);
+      }
+
+      function getDrawMetrics() {
+        const r = ratios[currentRatio];
+        const scale = getBaseScale() * zoom;
+        const drawW = image.naturalWidth * scale;
+        const drawH = image.naturalHeight * scale;
+        const x = (r.canvasW - drawW) / 2 + panX;
+        const y = (r.canvasH - drawH) / 2 + panY;
+        return { scale, drawW, drawH, x, y };
+      }
+
+      function clampPan() {
+        if (!image) return;
+        const r = ratios[currentRatio];
+        const scale = getBaseScale() * zoom;
+        const drawW = image.naturalWidth * scale;
+        const drawH = image.naturalHeight * scale;
+        const maxX = Math.max(0, (drawW - r.canvasW) / 2);
+        const maxY = Math.max(0, (drawH - r.canvasH) / 2);
+        panX = Math.min(maxX, Math.max(-maxX, panX));
+        panY = Math.min(maxY, Math.max(-maxY, panY));
+      }
+
+      function render() {
+        if (!image) return;
+        const r = ratios[currentRatio];
+        const { x, y, drawW, drawH } = getDrawMetrics();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#202938';
+        ctx.fillRect(0, 0, r.canvasW, r.canvasH);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(image, x, y, drawW, drawH);
+
+        // 構図を確認しやすいように、薄い三分割ガイドを重ねる
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,.24)';
+        ctx.lineWidth = Math.max(1, r.canvasW / 1200);
+        ctx.setLineDash([7, 7]);
+        for (let i = 1; i <= 2; i++) {
+          const gx = r.canvasW * i / 3;
+          const gy = r.canvasH * i / 3;
+          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, r.canvasH); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(r.canvasW, gy); ctx.stroke();
+        }
+        ctx.restore();
+
+        // 切り抜き範囲の輪郭
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,.75)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, r.canvasW - 2, r.canvasH - 2);
+        ctx.restore();
+      }
+
+      function updateZoomUI() {
+        zoomSlider.value = String(zoom);
+        zoomValue.textContent = `${Math.round(zoom * 100)}%`;
+      }
+
+      function setZoom(nextZoom) {
+        if (!image) return;
+        zoom = Math.min(4, Math.max(1, nextZoom));
+        clampPan();
+        updateZoomUI();
+        render();
+      }
+
+      function resetPosition() {
+        if (!image) return;
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+        updateZoomUI();
+        render();
+      }
+
+      function setRatio(ratio) {
+        if (!ratios[ratio]) return;
+        currentRatio = ratio;
+        const r = ratios[ratio];
+        canvas.width = r.canvasW;
+        canvas.height = r.canvasH;
+        canvas.style.aspectRatio = `${r.w} / ${r.h}`;
+        ratioChip.textContent = ratio;
+        document.querySelectorAll('.ratio-btn').forEach((button) => {
+          const active = button.dataset.ratio === ratio;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', String(active));
+        });
+        if (image) {
+          zoom = 1;
+          panX = 0;
+          panY = 0;
+          updateZoomUI();
+          render();
+        }
+      }
+
+      function loadFile(file) {
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          showToast('画像ファイルを選択してください');
+          return;
+        }
+        if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
+        imageObjectUrl = URL.createObjectURL(file);
+        const nextImage = new Image();
+        nextImage.onload = () => {
+          image = nextImage;
+          imageFileName = file.name || 'image';
+          zoom = 1;
+          panX = 0;
+          panY = 0;
+          emptyState.hidden = true;
+          canvasFrame.hidden = false;
+          $('#stageHint').textContent = '画像をドラッグして位置を調整。ホイールまたはズームスライダーで拡大・縮小できます。';
+          imageName.textContent = imageFileName;
+          imageDimensions.textContent = `${image.naturalWidth.toLocaleString()} × ${image.naturalHeight.toLocaleString()} px`;
+          setEnabled(true);
+          updateZoomUI();
+          render();
+          $('#exportNote').textContent = '元画像に近い解像度で書き出します。';
+          showToast('画像を読み込みました');
+        };
+        nextImage.onerror = () => showToast('画像を読み込めませんでした');
+        nextImage.src = imageObjectUrl;
+        fileInput.value = '';
+      }
+
+      function clearImage() {
+        image = null;
+        if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
+        imageObjectUrl = null;
+        imageFileName = '';
+        emptyState.hidden = false;
+        canvasFrame.hidden = true;
+        imageName.textContent = '画像が選択されていません';
+        imageDimensions.textContent = '—';
+        $('#stageHint').textContent = '画像を読み込むと、ドラッグで位置・スライダーやホイールで拡大率を調整できます。';
+        setEnabled(false);
+        zoom = 1; panX = 0; panY = 0;
+        updateZoomUI();
+      }
+
+      function exportImage() {
+        if (!image) return;
+        const r = ratios[currentRatio];
+        const { scale, x, y } = getDrawMetrics();
+        const sx = Math.max(0, Math.min(image.naturalWidth, -x / scale));
+        const sy = Math.max(0, Math.min(image.naturalHeight, -y / scale));
+        const sw = Math.min(r.canvasW / scale, image.naturalWidth - sx);
+        const sh = Math.min(r.canvasH / scale, image.naturalHeight - sy);
+
+        // 16:9 または 5:3 の整数倍になる最大サイズで出力
+        const units = Math.max(1, Math.floor(Math.min(sw / r.w, sh / r.h)));
+        const outW = units * r.w;
+        const outH = units * r.h;
+        const out = document.createElement('canvas');
+        out.width = outW;
+        out.height = outH;
+        const outCtx = out.getContext('2d');
+        const mime = $('#formatSelect').value;
+        if (mime === 'image/jpeg') {
+          outCtx.fillStyle = '#ffffff';
+          outCtx.fillRect(0, 0, outW, outH);
+        }
+        outCtx.imageSmoothingEnabled = true;
+        outCtx.imageSmoothingQuality = 'high';
+        outCtx.drawImage(image, sx, sy, sw, sh, 0, 0, outW, outH);
+        const extension = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
+        const baseName = imageFileName.replace(/\.[^.]+$/, '') || 'cropped-image';
+        const safeName = baseName.replace(/[\\/:*?"<>|]/g, '_');
+        out.toBlob((blob) => {
+          if (!blob) {
+            showToast('画像を書き出せませんでした');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${safeName}_${currentRatio.replace(':', 'x')}.${extension}`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1500);
+          showToast(`保存しました（${outW} × ${outH} px）`);
+        }, mime, mime === 'image/jpeg' || mime === 'image/webp' ? 0.94 : undefined);
+      }
+
+      // ファイル選択・ドラッグ＆ドロップ
+      fileInput.addEventListener('change', (event) => loadFile(event.target.files?.[0]));
+      const stage = $('#stageWrap');
+      ['dragenter', 'dragover'].forEach((type) => stage.addEventListener(type, (event) => {
+        event.preventDefault();
+        emptyState.classList.add('over');
+      }));
+      ['dragleave', 'drop'].forEach((type) => stage.addEventListener(type, (event) => {
+        event.preventDefault();
+        emptyState.classList.remove('over');
+      }));
+      stage.addEventListener('drop', (event) => {
+        const file = event.dataTransfer?.files?.[0];
+        if (file) loadFile(file);
+      });
+
+      // 比率とズーム
+      document.querySelectorAll('.ratio-btn').forEach((button) => {
+        button.addEventListener('click', () => setRatio(button.dataset.ratio));
+      });
+      zoomSlider.addEventListener('input', () => setZoom(Number(zoomSlider.value)));
+      $('#zoomIn').addEventListener('click', () => setZoom(zoom + 0.15));
+      $('#zoomOut').addEventListener('click', () => setZoom(zoom - 0.15));
+      $('#resetBtn').addEventListener('click', resetPosition);
+      $('#clearBtn').addEventListener('click', clearImage);
+      exportBtn.addEventListener('click', exportImage);
+
+      // ドラッグで画像位置を調整
+      canvas.addEventListener('pointerdown', (event) => {
+        if (!image) return;
+        dragging = true;
+        canvas.classList.add('dragging');
+        canvas.setPointerCapture(event.pointerId);
+        pointerStart = { x: event.clientX, y: event.clientY, panX, panY };
+      });
+      canvas.addEventListener('pointermove', (event) => {
+        if (!dragging || !pointerStart) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        panX = pointerStart.panX + (event.clientX - pointerStart.x) * scaleX;
+        panY = pointerStart.panY + (event.clientY - pointerStart.y) * scaleY;
+        clampPan();
+        render();
+      });
+      function endDrag() {
+        dragging = false;
+        pointerStart = null;
+        canvas.classList.remove('dragging');
+      }
+      canvas.addEventListener('pointerup', endDrag);
+      canvas.addEventListener('pointercancel', endDrag);
+      canvas.addEventListener('lostpointercapture', endDrag);
+
+      canvas.addEventListener('wheel', (event) => {
+        if (!image) return;
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? 1.08 : 1 / 1.08;
+        setZoom(zoom * factor);
+      }, { passive: false });
+
+      setRatio('16:9');
+      setEnabled(false);
+      updateZoomUI();
+    })();
+  </script>
+</body>
+</html>
